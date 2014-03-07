@@ -1,0 +1,128 @@
+Wizery TI WiLink8 Software for Freescale IMX6SL - Relase wz_100
+----------------------------------------------------------------
+
+This release contains all software required to get TI WiLink8 chip working on the IMX6SL board.
+
+The software release is comprised of several components:
+* kernel - Support patches for Freescale L3.0.35-4.1.0 kernel release for IMX6SL to enable TI WiLink8 support
+* tidriver - A Linux driver for the TI WiLink8 chip
+* hostap - Userspace daemons wpa_supplicant and hostapd adjusted for TI WiLink8
+
+For building hostap daemons 2 libraries should be cross compiled: openssl and libnl.
+Detailed instructions for building all components follow.
+
+Extracting the src package
+---------------------------
+tar jxvf wizery-imx6sl-src-wz_100.tar.bz2
+cd wizery-imx6sl-src-wz_100
+
+Setting up environment variables
+---------------------------------
+Set the following environment variables in your shell prior to building
+
+export ROOTFS=<path to your root fs>
+export TOOLCHAIN=<path to your toolchain bin directory>
+export ARCH=arm
+export CROSS_COMPILE=<prefix to toolchain binaries>
+export PKG_CONFIG_PATH=$ROOTFS/lib/pkgconfig
+export WIZERY_ROOT=<path where you extracted the src package>
+export WL18XX_ROOT=$WIZERY_ROOT/tidriver
+
+For example
+export ROOTFS=/home/eyalsh/wizery/ti/tftp/imx6slfs
+export TOOLCHAIN=/home/eyalsh/wizery/CodeSourcery/arm-2010q1/bin
+export CROSS_COMPILE=/home/eyalsh/wizery/CodeSourcery/arm-2010q1/bin/arm-none-linux-gnueabi-
+export PKG_CONFIG_PATH=$ROOTFS/lib/pkgconfig/
+export WIZERY_ROOT=/home/eyalsh/wizery/ti/freescale/deploy_test
+export ARCH=arm
+
+
+Building the kernel
+-------------------
+git clone git://git.freescale.com/imx/linux-2.6-imx.git
+cd linux-2.6-imx
+git checkout rel_imx_3.0.35_4.1.0
+git am ../kernel/*.patch
+make imx6s_defconfig
+make -j8 uImage
+cd ..
+
+Building the driver
+-------------------
+cd tidriver
+make defconfig-wl18xx
+export KLIB_BUILD=$WIZERY_ROOT/linux-2.6-imx    [point to the location of your freescale kernel]
+export KLIB=$ROOTFS
+make -C ${WL18XX_ROOT} -j8 && make -C ${KLIB_BUILD} M=${WL18XX_ROOT} INSTALL_MOD_DIR=updates INSTALL_MOD_PATH=${KLIB} modules_install
+
+This will build and install the TI driver to your root FS
+
+Installing TI WiLink8 Firmware
+-------------------------------
+cd firmware
+cp -R ti-connectivity/ $ROOTFS/lib/firmware/
+cd ..
+
+Building libnl
+--------------
+git clone git://git.infradead.org/users/tgr/libnl.git
+cd libnl
+git checkout -b libnl3_2
+./configure --prefix=$ROOTFS --host=arm-none-linux-gnueabi
+make
+make install
+
+This will build and install the libnl to your root FS
+
+Building openssl
+----------------
+wget http://www.openssl.org/source/openssl-1.0.0e.tar.gz
+tar zxvf openssl-1.0.0e.tar.gz
+cd openssl-1.0.0e
+./Configure --prefix=$ROOTFS linux-armv4
+make
+make install_sw
+cd ..
+
+This will build and install the openssl to your root FS
+
+Building wpa_supplicant
+----------------------
+cd hostap/wpa_supplicant
+cp android.config .config
+make clean
+DESTDIR=$ROOTFS make install
+cd ../../
+
+This will build wpa_supplicant + wpa_cli and install them in /usr/local/sbin in the root FS
+
+Building hostapd
+-----------------
+cd hostap/hostapd
+cp android.config .config
+make clean
+DESTDIR=$ROOTFS make install
+cd ../../
+
+This will build hostapd + hostapd_cli and install them in /usr/local/bin in the root FS
+
+Building iw
+------------
+git clone git://git.kernel.org/pub/scm/linux/kernel/git/jberg/iw.git
+cd iw
+DESTDIR=$ROOTFS CC=$TOOLCHAIN/arm-none-linux-gnueabi-gcc make install
+cd ..
+
+This will build iw and install it to /usr/bin in the root FS
+
+Building iperf
+--------------
+svn checkout svn://svn.code.sf.net/p/iperf/code/trunk iperf-code
+cd iperf-code
+export ac_cv_func_malloc_0_nonnull=yes
+./configure --host=arm-none-linux-gnueabi --prefix=$ROOTFS
+make
+make install
+cd ..
+
+This will build and install iperf to /bin in the root FS

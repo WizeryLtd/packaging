@@ -1,0 +1,158 @@
+Wizery Demo SD card for iMX6 Solo Lite EVK
+------------------------------------------
+
+These are instructions on how to create an SD card for IMX6SLEVK board which 
+will allow you to see a TI WiLink8 connected to the board in action.
+
+Prior to creating the SD card make sure you have setup the board according to instructions in
+"Wizery - Connecting TI WiLink8 to IMX6SLEVK"
+
+This archive contains 3 files:
+* u-boot-mx6sl-evk.bin - bootloader
+* uImage - prebuit kernel image based on Freescale L3.0.35-4.1.0 kernel with Wizery patches to enable TI WiLink8 support
+* wizery-imx6slevk-rootfs.tar.bz2 - Root FS containing kernel driver for TI WiLink8 as well as userspace binaries such as
+wpa_supplicant, hostapd, iw and iperf
+
+To prepare the SD card you will need a Linux host with an SD card reader.
+Note that the following instructions will erase any existing content on the SD card.
+
+1. Put the SD card in the SD card reader
+2. Identify the SD card block device. This could be done by running
+
+$ cat /proc/partitions 
+major minor  #blocks  name
+
+   7        0     599788 loop0
+   8        0  244198584 sda
+   8        1  240015360 sda1
+   8        2          1 sda2
+   8        5    4180992 sda5
+  11        0    1048575 sr0
+ 179        8    7761920 mmcblk0
+ 179        9    7753728 mmcblk0p1
+
+In this case mmcblk0 is the SD card block device
+mmcblk0p1 is an existing partition on the SD card
+Note that the SD card could have a different block device name in your case.
+To identify it correctly compare “cat /proc/partitions” outputs 
+
+In the following instructions replace the SD card block device accordingly to your settings
+
+3. Copy the bootloader to the SD card
+
+sudo dd if=u-boot-mx6sl-evk.bin of=/dev/mmcblk0 bs=512 seek=2 skip=2 conv=fsync
+
+4. Copy the kernel image to the SD card
+
+sudo dd if=uImage of=/dev/mmcblk0 bs=512 seek=2048 conv=fsync
+
+5. Delete any existing partitions and create a new parition
+
+sudo fdisk /dev/mmcblk0
+
+Press the following letter + Enter
+
+u     [Make sure you're working on sectors and NOT cylinders]
+u     [If the previous u changed to cylinders]
+d     [Repeat until no parition is shown in 'p' command]
+n     [Create a new parition]
+p     [Primary parition]
+1     [Parition #]
+16384 [starting at offset sector #16384, i.e. 8MB, which leaves enough space for the kernel, the boot loader and its configuration data]
+Enter [Use the default which is to create a parition which uses all the space]
+w     [Write the changes and exit]
+
+6. Format the new parition to ext4
+
+sudo mkfs.ext4 /dev/mmcblk0p1
+
+NOTE: use the new parition block device and NOT the entire SD card block device.
+To figure out what it is do "cat /proc/paritions"
+
+7. Mount the new file system
+
+sudo mkdir /mnt/sdcard
+sudo mount /dev/mmcblk0p1 /mnt/sdcard
+cd /mnt/sdcard
+
+8. Extract the root fs files to the new fs created on the sdcard
+
+cd /mnt/sdcard
+sudo tar jxvf ~/wizery/freescale/wizery-mx6sl-demo-sdcard/wizery-imx6slevk-rootfs.tar.bz2  [change according to your path]
+
+9. Unmount the SD card
+
+cd /
+sudo umount /mnt/sdcard
+
+10. Insert SD card to SD slot SD2 on the MCIMX6SLEVK board + Turn on the board
+
+11. Let the bootloader count to 0 and auto boot. 
+If the kernel doesn't boot reset the board and stop the bootloader so you get to the bootloader prompt
+
+setenv loadaddr 0x80800000
+setenv bootargs_base 'setenv bootargs console=ttymxc0,115200'
+setenv bootargs_mmc 'setenv bootargs ${bootargs} root=/dev/mmcblk0p1 rootwait'
+setenv bootcmd_mmc 'run bootargs_base bootargs_mmc;mmc dev 1;mmc read ${loadaddr} 0x800 0x2000;bootm'
+setenv bootcmd 'run bootcmd_mmc'
+saveenv
+run bootcmd
+
+12. If the kernel is booting it should detect the TI WiLink8 and load the driver (comprised of several kernel modules)
+Login using user: root and no password
+
+13. You can make sure the driver is loaded by running lsmod. The output should look like this:
+
+root@freescale ~$ lsmod | grep wl
+wl18xx                 80546  0
+wlcore                184559  1 wl18xx
+mac80211              325406  2 wl18xx,wlcore
+cfg80211              171273  3 wl18xx,wlcore,mac80211
+wlcore_sdio             4614  0
+compat                 10517  5 wl18xx,wlcore,mac80211,cfg80211,wlcore_sdio
+
+14. Bring up the wlan0 interface
+
+ifconfig wlan0 up
+ifconfig
+
+You should see wlan0 exists
+
+15. Perform a WiFi scan
+
+iw wlan0 scan
+
+16. Associate to an AP 
+
+cd /root
+Edit the .conf file to match you AP SSID and credentials. Example for both open (sta-open.conf) and WPA2 (sta-wpa2.conf) exist.
+
+/usr/local/sbin/wpa_supplicant -D nl80211 -i wlan0 -c sta-open.conf -B
+
+After a few seconds you should see logs from the driver indicating it associated
+
+To view the status of connection with the AP you can do:
+
+iw wlan0 link
+
+or 
+
+/usr/local/sbin/wpa_cli -i wlan0 status
+
+17. In case you want to see wpa_supplicant logs run it this way
+
+/usr/local/sbin/wpa_supplicant -D nl80211 -i wlan0 -c sta-open.conf -d 
+(or -dd for more logs)
+
+18. After association you'll need to set an IP for the interface.
+
+Static IP: ifconfig wlan0 10.1.1.1 netmask 255.255.255.0
+DHCP: udhcpc -i wlan0 
+
+You should be able to see the IP assigned using ifconfig
+
+19. You can use ping or iperf to test traffic
+
+
+
+
