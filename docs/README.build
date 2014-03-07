@@ -34,6 +34,7 @@ export TOOLCHAIN=/home/eyalsh/wizery/CodeSourcery/arm-2010q1/bin
 export CROSS_COMPILE=/home/eyalsh/wizery/CodeSourcery/arm-2010q1/bin/arm-none-linux-gnueabi-
 export PKG_CONFIG_PATH=$ROOTFS/lib/pkgconfig/
 export WIZERY_ROOT=/home/eyalsh/wizery/ti/freescale/deploy_test
+export WL18XX_ROOT=$WIZERY_ROOT/tidriver
 export ARCH=arm
 
 
@@ -50,10 +51,11 @@ cd ..
 Building the driver
 -------------------
 cd tidriver
-make defconfig-wl18xx
 export KLIB_BUILD=$WIZERY_ROOT/linux-2.6-imx    [point to the location of your freescale kernel]
 export KLIB=$ROOTFS
+make defconfig-wl18xx
 make -C ${WL18XX_ROOT} -j8 && make -C ${KLIB_BUILD} M=${WL18XX_ROOT} INSTALL_MOD_DIR=updates INSTALL_MOD_PATH=${KLIB} modules_install
+cd ..
 
 This will build and install the TI driver to your root FS
 
@@ -68,9 +70,11 @@ Building libnl
 git clone git://git.infradead.org/users/tgr/libnl.git
 cd libnl
 git checkout -b libnl3_2
+./autogen.sh
 ./configure --prefix=$ROOTFS --host=arm-none-linux-gnueabi
 make
 make install
+cd ..
 
 This will build and install the libnl to your root FS
 
